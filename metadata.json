@@ -1,0 +1,6 @@
+{
+  "name": "Logistics Control Tower",
+  "description": "Operational global logistics control tower featuring live analytics, exception control, waybill tracking, and partner dispatch management.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
