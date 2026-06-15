@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { MOCK_SHIPMENTS } from '../mockData';
 import { Shipment, ShipmentStatus } from '../types';
 import { 
@@ -21,7 +21,11 @@ import {
   X, 
   Info,
   CheckCircle2,
-  AlertTriangle
+  AlertTriangle,
+  MoreVertical,
+  Check,
+  Eye,
+  Copy
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { format, addDays } from 'date-fns';
@@ -50,17 +54,28 @@ export function Shipments({ initialSelectedId, onClearSelection }: { initialSele
   const [maxWeight, setMaxWeight] = useState<number>(600);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+  
+  // Sorting state
   const [sortCol, setSortCol] = useState<keyof Shipment>('eta');
   const [sortAsc, setSortAsc] = useState(true);
+  
   const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId || null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  
+  // Mobile UI States
+  const [isMobile, setIsMobile] = useState(false);
+  const [showFilterBottomSheet, setShowFilterBottomSheet] = useState(false);
+  const [showSortActionSheet, setShowSortActionSheet] = useState(false);
+  const [contextMenuShipment, setContextMenuShipment] = useState<Shipment | null>(null);
+  const [swipedCardId, setSwipedCardId] = useState<string | null>(null);
+
   const [toast, setToast] = useState<{msg: string, visible: boolean, type?: 'success' | 'warning'}>({
     msg: '', 
     visible: false,
     type: 'success'
   });
 
-  // Consignment Creation form state
+  // Consignment creation form state
   const [newShipment, setNewShipment] = useState({
     id: '',
     originCity: 'Lagos',
@@ -72,8 +87,18 @@ export function Shipments({ initialSelectedId, onClearSelection }: { initialSele
     etaDays: 4
   });
 
-  // Keep in sync if global search selects something new
-  useMemo(() => {
+  // Keep responsive triggers updated
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Synchronize dynamic updates
+  useEffect(() => {
     if (initialSelectedId) {
       setSelectedId(initialSelectedId);
       if (onClearSelection) onClearSelection();
@@ -82,7 +107,7 @@ export function Shipments({ initialSelectedId, onClearSelection }: { initialSele
 
   const handleFlag = (id: string) => {
     setShipments(prev => prev.map(s => s.id === id ? { ...s, status: 'flagged' } : s));
-    setToast({ msg: `Shipment ${id} flagged as exception.`, visible: true, type: 'warning' });
+    setToast({ msg: `Cargo ${id} flagged as incident exception.`, visible: true, type: 'warning' });
     setTimeout(() => setToast(t => ({ ...t, visible: false })), 4000);
   };
 
@@ -94,11 +119,10 @@ export function Shipments({ initialSelectedId, onClearSelection }: { initialSele
     setMaxWeight(600);
   };
 
-  // Filtered & Sorted datasets
+  // Filtered & Sorted Datasets
   const filtered = useMemo(() => {
     let result = shipments;
     
-    // General search filter
     if (search) {
       const q = search.toLowerCase();
       result = result.filter(s => 
@@ -109,27 +133,22 @@ export function Shipments({ initialSelectedId, onClearSelection }: { initialSele
       );
     }
     
-    // Status filter
     if (statusFilter !== 'all') {
       result = result.filter(s => s.status === statusFilter);
     }
 
-    // Carrier filter
     if (carrierFilter !== 'all') {
       result = result.filter(s => s.carrier === carrierFilter);
     }
 
-    // Origin filter
     if (originFilter !== 'all') {
       result = result.filter(s => s.origin.city === originFilter);
     }
 
-    // Weight limit filter
     if (maxWeight < 600) {
       result = result.filter(s => s.weight <= maxWeight);
     }
     
-    // Sorter logic
     result = [...result].sort((a, b) => {
       let valA: any = a[sortCol];
       let valB: any = b[sortCol];
@@ -155,7 +174,12 @@ export function Shipments({ initialSelectedId, onClearSelection }: { initialSele
     }
   };
 
-  // Custom live counters aggregated for current match results
+  const applyMobileSort = (col: keyof Shipment, asc: boolean) => {
+    setSortCol(col);
+    setSortAsc(asc);
+    setShowSortActionSheet(false);
+  };
+
   const metrics = useMemo(() => {
     const total = filtered.length;
     const transit = filtered.filter(s => s.status === 'in_transit').length;
@@ -164,7 +188,6 @@ export function Shipments({ initialSelectedId, onClearSelection }: { initialSele
     return { total, transit, critical, totalMass };
   }, [filtered]);
 
-  // Exporter tool mapping the filtered scope directly
   const handleExportCSV = () => {
     if (filtered.length === 0) {
       alert("No data available to export.");
@@ -189,20 +212,19 @@ export function Shipments({ initialSelectedId, onClearSelection }: { initialSele
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `African_Hub_Manifest_${format(new Date(), 'yyyyMMdd_HHmmss')}.csv`);
+    link.setAttribute("download", `Master_Manifest_${format(new Date(), 'yyyyMMdd')}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     
     setToast({ 
-      msg: `Exported ${filtered.length} consignments successfully to CSV file.`, 
+      msg: `Exported ${filtered.length} consignments to CSV.`, 
       visible: true,
       type: 'success'
     });
     setTimeout(() => setToast(t => ({ ...t, visible: false })), 4000);
   };
 
-  // Open the modal and set realistic defaults
   const handleOpenRegistry = () => {
     const customId = `MTC-2026-${Math.floor(10000 + Math.random() * 90000)}`;
     const citiesKeys = Object.keys(CITY_COORDS);
@@ -228,13 +250,9 @@ export function Shipments({ initialSelectedId, onClearSelection }: { initialSele
 
   const handleRegisterShipment = (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!newShipment.id.trim()) {
-      alert("Please provide a consignment tracking ID.");
-      return;
-    }
+    if (!newShipment.id.trim()) return;
     if (newShipment.originCity === newShipment.destinationCity) {
-      alert("Conflict: Origin Port and Destination cannot be identical.");
+      alert("Conflict: Origin and Destination ports cannot be identical.");
       return;
     }
 
@@ -273,254 +291,255 @@ export function Shipments({ initialSelectedId, onClearSelection }: { initialSele
 
     setShipments([freshCargo, ...shipments]);
     setIsCreateOpen(false);
-    
     setToast({
-      msg: `Custom Cargo ID ${newShipment.id} created and dispatched!`,
+      msg: `Cargo ID ${newShipment.id} created!`,
       visible: true,
       type: 'success'
     });
     setTimeout(() => setToast(t => ({ ...t, visible: false })), 4000);
   };
 
+  const handleCopyIDToClipboard = (id: string) => {
+    navigator.clipboard.writeText(id).then(() => {
+      setToast({ msg: `Copied ID: ${id} to clipboard.`, visible: true, type: 'success' });
+      setTimeout(() => setToast(t => ({ ...t, visible: false })), 3000);
+    });
+    setContextMenuShipment(null);
+  };
+
   const selectedShipment = shipments.find(s => s.id === selectedId) || null;
 
   return (
-    <div className="p-6 max-w-[1600px] mx-auto animate-in fade-in duration-500 relative min-h-screen pb-14">
+    <div className="p-4 md:p-6 max-w-[1600px] mx-auto animate-in fade-in duration-500 relative min-h-screen pb-20 md:pb-12">
       
-      {/* Title & Global Trigger Row */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+      {/* Title Header */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-5">
         <div>
-          <h1 className="text-2xl font-bold font-display tracking-tight text-text-primary">Master Manifest</h1>
-          <p className="text-xs text-text-muted mt-0.5 font-mono">Centralized monitoring of all air and ocean freight waybills.</p>
+          <h1 className="text-xl md:text-2xl font-bold font-display tracking-tight text-text-primary">Master Manifest</h1>
+          <p className="text-[11px] text-text-muted mt-0.5 font-mono">Real-time status registers of African inter-hub waybills.</p>
         </div>
         
-        {/* Actions strip */}
-        <div className="flex items-center gap-2.5 flex-wrap w-full md:w-auto">
+        {/* Actions Button Strip */}
+        <div className="flex items-center gap-2 w-full md:w-auto h-9">
           <button 
             onClick={handleOpenRegistry}
-            className="flex-1 md:flex-none flex items-center justify-center gap-1.5 bg-accent-primary hover:bg-accent-primary/90 text-bg-base font-semibold px-4 py-2 rounded-md text-[13px] active:scale-95 transition-all shadow-lg shadow-accent-primary/10"
+            className="flex-1 md:flex-none h-full flex items-center justify-center gap-1.5 bg-accent-primary hover:bg-accent-primary/95 text-bg-base font-bold px-4 rounded-lg text-xs"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>Add Consignment</span>
+            <span>Add Cargo</span>
           </button>
 
           <button 
             onClick={handleExportCSV}
-            className="flex-1 md:flex-none flex items-center justify-center gap-1.5 bg-bg-surface border border-bg-elevated/80 hover:border-accent-primary/40 hover:text-accent-primary px-3.5 py-2 rounded-md text-[13px] text-text-primary transition-all shadow-sm active:scale-95"
-            title="Download viewable selection as spreadsheet document"
+            className="flex-1 md:flex-none h-full flex items-center justify-center gap-1.5 bg-bg-surface border border-bg-elevated hover:bg-bg-elevated px-3.5 rounded-lg text-xs"
           >
-            <Download className="w-3.5 h-3.5" />
-            <span>Export CSV</span>
+            <Download className="w-3.5 h-3.5 text-text-muted" />
+            <span>Export Manifest</span>
           </button>
 
-          <div className="bg-bg-surface border border-bg-elevated p-0.5 rounded-md flex items-center shadow-inner shrink-0">
-            <button 
-              onClick={() => setViewMode('list')}
-              className={cn(
-                "p-1.5 rounded transition-colors",
-                viewMode === 'list' ? "bg-bg-elevated text-accent-primary font-bold" : "text-text-muted hover:text-text-primary"
-              )}
-              title="Table View Layout"
-            >
-              <List className="w-4 h-4" />
-            </button>
-            <button 
-              onClick={() => setViewMode('grid')}
-              className={cn(
-                "p-1.5 rounded transition-colors",
-                viewMode === 'grid' ? "bg-bg-elevated text-accent-primary font-bold" : "text-text-muted hover:text-text-primary"
-              )}
-              title="Interactive Cards Layout"
-            >
-              <Grid className="w-4 h-4" />
-            </button>
-          </div>
+          {!isMobile && (
+            <div className="bg-bg-surface border border-bg-elevated p-0.5 rounded-lg flex items-center h-full shrink-0">
+              <button 
+                onClick={() => setViewMode('list')}
+                className={cn("p-1.5 rounded transition-colors", viewMode === 'list' && "bg-bg-elevated text-accent-primary")}
+              >
+                <List className="w-3.5 h-3.5" />
+              </button>
+              <button 
+                onClick={() => setViewMode('grid')}
+                className={cn("p-1.5 rounded transition-colors", viewMode === 'grid' && "bg-bg-elevated text-accent-primary")}
+              >
+                <Grid className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Dynamic Performance KPI Indicator bar */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <div className="bg-bg-surface border border-bg-elevated rounded-lg p-3.5 flex items-center gap-3">
-          <div className="p-2.5 rounded bg-accent-primary/10 text-accent-primary">
+      {/* KPI stats dashboard panels */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+        <div className="bg-bg-surface border border-bg-elevated rounded-lg p-3 flex items-center gap-3">
+          <div className="p-2 bg-accent-primary/10 text-accent-primary rounded">
             <Layers className="w-4 h-4" />
           </div>
           <div className="flex flex-col">
-            <span className="text-[10px] font-mono text-text-muted uppercase tracking-wider">Filtered Volume</span>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-lg font-mono font-bold leading-tight">{metrics.total}</span>
-              <span className="text-[9px] text-text-muted">records Match</span>
-            </div>
+            <span className="text-[9px] font-mono text-text-muted uppercase">Volume</span>
+            <span className="text-base font-mono font-bold">{metrics.total}</span>
           </div>
         </div>
 
-        <div className="bg-bg-surface border border-bg-elevated rounded-lg p-3.5 flex items-center gap-3">
-          <div className="p-2.5 rounded bg-accent-success/15 text-accent-success">
+        <div className="bg-bg-surface border border-bg-elevated rounded-lg p-3 flex items-center gap-3">
+          <div className="p-2 bg-accent-success/15 text-accent-success rounded">
             <Truck className="w-4 h-4" />
           </div>
           <div className="flex flex-col">
-            <span className="text-[10px] font-mono text-text-muted uppercase tracking-wider">Active In-Transit</span>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-lg font-mono font-bold leading-tight text-accent-success">{metrics.transit}</span>
-              <span className="text-[9px] text-text-muted">en route</span>
-            </div>
+            <span className="text-[9px] font-mono text-text-muted uppercase">En Route</span>
+            <span className="text-base font-mono font-bold text-accent-success">{metrics.transit}</span>
           </div>
         </div>
 
-        <div className="bg-bg-surface border border-bg-elevated rounded-lg p-3.5 flex items-center gap-3">
-          <div className="p-2.5 rounded bg-accent-warning/15 text-accent-warning">
+        <div className="bg-bg-surface border border-bg-elevated rounded-lg p-3 flex items-center gap-3">
+          <div className="p-2 bg-accent-warning/15 text-accent-warning rounded">
             <AlertCircle className="w-4 h-4" />
           </div>
           <div className="flex flex-col">
-            <span className="text-[10px] font-mono text-text-muted uppercase tracking-wider">Incident Warnings</span>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-lg font-mono font-bold leading-tight text-accent-warning">{metrics.critical}</span>
-              <span className="text-[9px] text-text-muted">flagged/failed</span>
-            </div>
+            <span className="text-[9px] font-mono text-text-muted uppercase">Incident</span>
+            <span className="text-base font-mono font-bold text-accent-warning">{metrics.critical}</span>
           </div>
         </div>
 
-        <div className="bg-bg-surface border border-bg-elevated rounded-lg p-3.5 flex items-center gap-3">
-          <div className="p-2.5 rounded bg-amber-500/10 text-amber-500">
+        <div className="bg-bg-surface border border-bg-elevated rounded-lg p-3 flex items-center gap-3">
+          <div className="p-2 bg-amber-500/10 text-amber-500 rounded">
             <Scale className="w-4 h-4" />
           </div>
           <div className="flex flex-col">
-            <span className="text-[10px] font-mono text-text-muted uppercase tracking-wider">Payload Weight</span>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-lg font-mono font-bold leading-tight">
-                {metrics.totalMass >= 1000 
-                  ? `${(metrics.totalMass / 1000).toFixed(2).toLocaleString()} T` 
-                  : `${metrics.totalMass.toLocaleString()} kg`}
-              </span>
-              <span className="text-[9px] text-text-muted">total cargo</span>
-            </div>
+            <span className="text-[9px] font-mono text-text-muted uppercase">Payload</span>
+            <span className="text-base font-mono font-bold">
+              {metrics.totalMass >= 1000 ? `${(metrics.totalMass / 1000).toFixed(1)}T` : `${metrics.totalMass}kg`}
+            </span>
           </div>
         </div>
       </div>
 
-      {/* Route Waypoint Vector/SVG Map telemetry visualization */}
+      {/* Embedded Route Waypoint Arc Visualizer */}
       <div className="mb-6">
         <RouteWaypointVisualizer 
           shipment={selectedShipment || (filtered.length > 0 ? filtered[0] : null)} 
         />
-        {!selectedId && filtered.length > 0 && (
-          <div className="text-[10px] text-text-muted font-mono mt-2 text-center">
-            💡 Previewing first filtered waybill route live. Select any consignment row or card below to track its path.
-          </div>
-        )}
       </div>
 
-      {/* Primary Query Filters Control Strip */}
-      <div className="bg-bg-surface border border-bg-elevated rounded-lg p-4 mb-6 shadow-sm flex flex-col gap-3">
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          {/* Quick Find Field */}
-          <div className="relative flex-1 min-w-[240px]">
-            <Search className="w-4 h-4 text-text-muted absolute left-3.5 top-1/2 -translate-y-1/2" />
+      {/* SEARCH AND FILTERS */}
+      {/* Dynamic Header Layout based on viewport matches */}
+      {isMobile ? (
+        /* Mobile Specific: search / sorting single line combo */
+        <div className="flex items-center gap-2 mb-4 w-full">
+          <div className="relative flex-1">
+            <Search className="w-3.5 h-3.5 text-text-muted absolute left-3 top-1/2 -translate-y-1/2" />
             <input 
               type="text"
-              placeholder="Find consignment via ID, Carrier, Port..."
+              placeholder="Search ID, carrier..."
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="w-full bg-bg-elevated/40 border border-bg-elevated rounded-md py-2 pl-10 pr-4 text-xs font-sans text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent-primary focus:border-accent-primary transition-all"
+              className="w-full bg-bg-surface border border-bg-elevated rounded-lg py-1.5 pl-8.5 pr-8 text-xs text-text-primary focus:outline-none"
             />
             {search && (
-              <button 
-                onClick={() => setSearch('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 hover:text-accent-primary text-text-muted"
-                title="Reset search field"
-              >
+              <button onClick={() => setSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted">
                 <X className="w-3.5 h-3.5" />
               </button>
             )}
           </div>
-
-          <div className="flex items-center gap-2">
-            {/* Quick Filter: Status Selector */}
-            <select 
-              value={statusFilter} 
-              onChange={e => setStatusFilter(e.target.value as any)}
-              className="bg-bg-surface border border-bg-elevated rounded-md py-2 pl-3 pr-8 text-xs font-mono font-medium focus:outline-none focus:border-accent-primary appearance-none cursor-pointer"
-              style={{ backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23888888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.5rem center', backgroundSize: '1em' }}
-            >
-              <option value="all">📁 All Cargo Statuses</option>
-              <option value="in_transit">In Transit</option>
-              <option value="delivered">Delivered</option>
-              <option value="delayed">Delayed</option>
-              <option value="failed">Failed</option>
-              <option value="flagged">Flagged Exceptions</option>
-            </select>
-
-            {/* Toggle Advanced Filters Container */}
-            <button 
-              onClick={() => setShowAdvanced(!showAdvanced)}
-              className={cn(
-                "flex items-center gap-1 px-3 py-2 border rounded-md text-xs font-medium transition-all select-none active:scale-95",
-                showAdvanced 
-                  ? "bg-bg-elevated border-accent-primary text-accent-primary font-bold" 
-                  : "bg-bg-surface border-bg-elevated hover:bg-bg-elevated/40 text-text-primary"
-              )}
-            >
-              <Filter className="w-3.5 h-3.5" />
-              <span>Attributes</span>
-              {showAdvanced ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-            </button>
-
-            {/* Reset All filter settings */}
-            {(search || statusFilter !== 'all' || carrierFilter !== 'all' || originFilter !== 'all' || maxWeight < 600) && (
-              <button
-                onClick={handleResetFilters}
-                className="flex items-center gap-1.5 px-3 py-2 bg-text-primary text-bg-base rounded-md text-xs font-semibold hover:bg-text-secondary transition-all active:scale-95 shadow-sm"
-                title="Wipe current filtration selection parameters"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>Reset</span>
-              </button>
+          
+          <button 
+            onClick={() => setShowFilterBottomSheet(true)}
+            className={cn(
+              "h-[32px] px-3.5 border rounded-lg text-xs font-semibold flex items-center gap-1.5 active:scale-95 transition-all select-none",
+              statusFilter !== 'all' || carrierFilter !== 'all' || originFilter !== 'all' || maxWeight < 600
+                ? "bg-accent-primary/10 border-accent-primary text-accent-primary font-bold"
+                : "bg-bg-surface border-bg-elevated text-text-primary"
             )}
-          </div>
+          >
+            <Filter className="w-3.5 h-3.5" />
+            <span>Filter</span>
+          </button>
+          
+          <button 
+            onClick={() => setShowSortActionSheet(true)}
+            className="h-[32px] px-3.5 bg-bg-surface border border-bg-elevated text-text-primary rounded-lg text-xs font-semibold flex items-center gap-1.5 active:scale-95 transition-all select-none"
+          >
+            <Layers className="w-3.5 h-3.5 text-text-muted" />
+            <span>Sort</span>
+          </button>
         </div>
-
-        {/* Expandable Advanced Parameter controls */}
-        {showAdvanced && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-3 border-t border-bg-elevated/50 animate-in slide-in-from-top-2 duration-150">
-            {/* Carrier select drop */}
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[10px] font-mono text-text-muted uppercase font-bold tracking-wider">Logistics Transporter</label>
-              <select 
-                value={carrierFilter}
-                onChange={e => setCarrierFilter(e.target.value)}
-                className="bg-bg-surface border border-bg-elevated rounded-md py-1.5 px-2 text-xs focus:outline-none focus:border-accent-primary focus:ring-1 focus:ring-accent-primary cursor-pointer w-full"
-              >
-                <option value="all">All Operators</option>
-                {CARRIERS_LIST.map(c => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
+      ) : (
+        /* Desktop/Tablet view standard filters */
+        <div className="bg-bg-surface border border-bg-elevated rounded-lg p-4 mb-5 shadow-sm flex flex-col gap-3">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div className="relative flex-1 min-w-[240px]">
+              <Search className="w-4 h-4 text-text-muted absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input 
+                type="text"
+                placeholder="Find waybill ID, Carrier, Port..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className="w-full bg-bg-elevated/20 border border-bg-elevated rounded-lg py-1.5 pl-10 pr-4 text-xs placeholder:text-text-muted text-text-primary focus:outline-none"
+              />
+              {search && (
+                <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
 
-            {/* Origin port selector */}
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[10px] font-mono text-text-muted uppercase font-bold tracking-wider">Source Hub Terminal</label>
+            <div className="flex items-center gap-2">
               <select 
-                value={originFilter}
-                onChange={e => setOriginFilter(e.target.value)}
-                className="bg-bg-surface border border-bg-elevated rounded-md py-1.5 px-2 text-xs focus:outline-none focus:border-accent-primary focus:ring-1 focus:ring-accent-primary cursor-pointer w-full"
+                value={statusFilter} 
+                onChange={e => setStatusFilter(e.target.value as any)}
+                className="bg-bg-surface border border-bg-elevated rounded-lg py-1.5 pl-3 pr-8 text-xs font-semibold focus:outline-none cursor-pointer appearance-none"
+                style={{ backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23888888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.5rem center', backgroundSize: '1em' }}
               >
-                <option value="all">All Launch Ports</option>
-                {Object.keys(CITY_COORDS).map(city => (
-                  <option key={city} value={city}>{city} ({CITY_COORDS[city].country})</option>
-                ))}
+                <option value="all">📁 All Transit Statuses</option>
+                <option value="in_transit">In Transit</option>
+                <option value="delivered">Delivered</option>
+                <option value="delayed">Delayed</option>
+                <option value="failed">Failed</option>
+                <option value="flagged">Flagged</option>
               </select>
-            </div>
 
-            {/* Weight sliders constraint */}
-            <div className="flex flex-col gap-1.5">
-              <div className="flex items-center justify-between">
-                <label className="text-[10px] font-mono text-text-muted uppercase font-bold tracking-wider">Maximum Transit Weight</label>
-                <span className="text-[10px] font-mono font-semibold text-accent-primary bg-accent-primary/10 px-1.5 py-0.5 rounded">
-                  {maxWeight === 600 ? "No Limit" : `<= ${maxWeight} kg`}
-                </span>
+              <button 
+                onClick={() => setShowAdvanced(!showAdvanced)}
+                className={cn(
+                  "flex items-center gap-1 px-3 py-1.5 border rounded-lg text-xs font-semibold transition-all select-none h-8",
+                  showAdvanced ? "bg-bg-elevated border-accent-primary text-accent-primary font-bold" : "bg-bg-surface border-bg-elevated"
+                )}
+              >
+                <Filter className="w-3.5 h-3.5" />
+                <span>Attributes</span>
+                {showAdvanced ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+              </button>
+
+              {(search || statusFilter !== 'all' || carrierFilter !== 'all' || originFilter !== 'all' || maxWeight < 600) && (
+                <button
+                  onClick={handleResetFilters}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-text-primary text-bg-base font-bold rounded-lg text-xs"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Reset</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {showAdvanced && (
+            <div className="grid grid-cols-3 gap-4 pt-4 border-t border-bg-elevated/40 animate-in slide-in-from-top-2">
+              <div className="flex flex-col gap-1">
+                <span className="text-[9px] font-mono text-text-muted uppercase">Transporter Agency</span>
+                <select 
+                  value={carrierFilter}
+                  onChange={e => setCarrierFilter(e.target.value)}
+                  className="bg-bg-surface border border-bg-elevated rounded-md py-1.5 px-2 text-xs"
+                >
+                  <option value="all">All Transporters</option>
+                  {CARRIERS_LIST.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
               </div>
-              <div className="flex items-center gap-2.5">
-                <span className="text-[10px] font-mono text-text-muted">15kg</span>
+
+              <div className="flex flex-col gap-1">
+                <span className="text-[9px] font-mono text-text-muted uppercase">Source Port Hub</span>
+                <select 
+                  value={originFilter}
+                  onChange={e => setOriginFilter(e.target.value)}
+                  className="bg-bg-surface border border-bg-elevated rounded-md py-1.5 px-2 text-xs"
+                >
+                  <option value="all">All Launch Ports</option>
+                  {Object.keys(CITY_COORDS).map(city => <option key={city} value={city}>{city}</option>)}
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <div className="flex justify-between items-center">
+                  <span className="text-[9px] font-mono text-text-muted uppercase">Max Weight Limit</span>
+                  <span className="text-[10px] font-mono text-accent-primary bg-accent-primary/10 px-1 rounded">{maxWeight}kg</span>
+                </div>
                 <input 
                   type="range"
                   min="15"
@@ -528,263 +547,543 @@ export function Shipments({ initialSelectedId, onClearSelection }: { initialSele
                   step="10"
                   value={maxWeight}
                   onChange={e => setMaxWeight(Number(e.target.value))}
-                  className="flex-1 accent-accent-primary bg-bg-elevated h-1 rounded-lg cursor-pointer transition-colors"
+                  className="mt-2"
                 />
-                <span className="text-[10px] font-mono text-text-muted">600kg</span>
               </div>
             </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
 
-      {/* Main content display */}
-      <div className="bg-bg-surface border border-bg-elevated rounded-lg overflow-hidden flex flex-col shadow-sm">
-        
-        {viewMode === 'list' ? (
-          /* Classical structured list display with rich actions */
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead className="bg-bg-elevated/80 border-b border-bg-elevated">
-                <tr>
-                  {[
-                    { key: 'id', label: 'Waybill ID', resp: '' },
-                    { key: 'origin', label: 'Departure Terminal', resp: '' },
-                    { key: 'destination', label: 'Arrival Terminal', resp: '' },
-                    { key: 'carrier', label: 'Operator', resp: 'hidden md:table-cell' },
-                    { key: 'status', label: 'Tracking Node Status', resp: '' },
-                    { key: 'eta', label: 'Projected ETA', resp: 'hidden sm:table-cell' },
-                    { key: 'weight', label: 'Mass Class', resp: 'hidden md:table-cell' },
-                  ].map(col => (
-                    <th 
-                      key={col.key} 
-                      className={cn(
-                        "px-5 py-3 text-[11px] font-mono text-text-muted uppercase font-bold tracking-wider cursor-pointer hover:text-text-primary whitespace-nowrap bg-bg-elevated/70 select-none group",
-                        col.resp
-                      )}
-                      onClick={() => toggleSort(col.key as keyof Shipment)}
-                    >
-                      <div className="flex items-center gap-1.5">
-                        <span>{col.label}</span>
-                        <span className="text-text-muted/40 group-hover:text-text-primary transition-colors">
-                          {sortCol === col.key 
-                            ? (sortAsc ? <ChevronUp className="w-3.5 h-3.5 text-accent-primary" /> : <ChevronDown className="w-3.5 h-3.5 text-accent-primary" />) 
-                            : <ChevronDown className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100" />
-                          }
-                        </span>
-                      </div>
-                    </th>
-                  ))}
-                  <th className="px-5 py-3 text-[11px] font-mono text-text-muted uppercase font-bold tracking-wider text-right">Inspect</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-bg-elevated/50">
-                {filtered.map((s, index) => {
-                  let badgeColor = 'bg-bg-elevated text-text-muted';
-                  if (s.status === 'in_transit') badgeColor = 'bg-accent-primary/10 text-accent-primary border border-accent-primary/15';
-                  else if (s.status === 'delivered') badgeColor = 'bg-accent-success/10 text-accent-success border border-accent-success/15';
-                  else if (s.status === 'delayed') badgeColor = 'bg-accent-warning/10 text-accent-warning border border-accent-warning/15';
-                  else if (s.status === 'flagged') badgeColor = 'bg-accent-warning/20 text-accent-warning border border-accent-warning/30 font-bold';
-                  else if (s.status === 'failed') badgeColor = 'bg-accent-danger/10 text-accent-danger border border-accent-danger/20';
-
-                  return (
-                    <tr 
-                      key={s.id} 
-                      onClick={() => setSelectedId(s.id)}
-                      className={cn(
-                        "hover:bg-bg-elevated/30 cursor-pointer transition-all border-b border-bg-elevated/60 group",
-                        index % 2 === 1 ? "bg-bg-surface/50" : "bg-bg-surface"
-                      )}
-                    >
-                      {/* Tracking ID */}
-                      <td className="px-5 py-3 font-mono text-[12px] font-semibold text-text-primary group-hover:text-accent-primary group-hover:translate-x-0.5 transition-all">
-                        {s.id}
-                      </td>
-
-                      {/* Origin Depot */}
-                      <td className="px-5 py-3 text-[12px]">
-                        <div className="flex flex-col">
-                          <span className="font-semibold text-text-primary">{s.origin.city}</span>
-                          <span className="font-mono text-[10px] text-text-muted">{s.origin.country}</span>
-                        </div>
-                      </td>
-
-                      {/* Destination depot */}
-                      <td className="px-5 py-3 text-[12px]">
-                        <div className="flex flex-col">
-                          <span className="font-semibold text-text-primary">{s.destination.city}</span>
-                          <span className="font-mono text-[10px] text-text-muted">{s.destination.country}</span>
-                        </div>
-                      </td>
-
-                      {/* Carrier */}
-                      <td className="px-5 py-3 text-[12px] hidden md:table-cell">
-                        <span className="px-2 py-0.5 bg-bg-base rounded border border-bg-elevated text-text-muted text-[11px] font-mono">
-                          {s.carrier}
-                        </span>
-                      </td>
-
-                      {/* Tracking Node Status */}
-                      <td className="px-5 py-3">
-                        <span className={cn(
-                          "px-2 py-0.5 rounded text-[10px] font-mono font-medium uppercase tracking-[0.05em] inline-block",
-                          badgeColor
-                        )}>
-                          {s.status.replace('_', ' ')}
-                        </span>
-                      </td>
-
-                      {/* Projected ETA */}
-                      <td className="px-5 py-3 font-mono text-[12px] text-text-primary hidden sm:table-cell">
-                        {format(new Date(s.eta), 'MMM dd, yyyy')}
-                      </td>
-
-                      {/* Mass dimensions */}
-                      <td className="px-5 py-3 text-[12px] hidden md:table-cell">
-                        <div className="flex flex-col">
-                          <span className="font-mono text-text-primary">{s.weight} kg</span>
-                          <span className="text-[10px] text-text-muted truncate max-w-[100px]" title="Dimensions">{s.dimensions}</span>
-                        </div>
-                      </td>
-
-                      {/* Inspect Indicator button container */}
-                      <td className="px-5 py-3 text-right text-[12px] text-text-muted group-hover:text-accent-primary transition-colors">
-                        <span className="inline-flex items-center gap-1 bg-bg-elevated/40 border border-bg-elevated px-2 py-1 rounded text-[11px] font-semibold group-hover:bg-accent-primary group-hover:text-bg-base transition-all select-none">
-                          Inspect
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          /* Dynamic Interactive Cargo Bento-Grid Cards View mode */
-          <div className="p-5 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 bg-bg-elevated/20">
-            {filtered.map(s => {
-              let borderStyle = 'border-l-[4px] border-text-muted';
+      {/* CORE DISPLAY (GRID/LIST FOR DESKTOP OR SWIPE-CARDS FOR MOBILE) */}
+      <div className="bg-bg-surface border border-[rgba(255,255,255,0.06)] rounded-lg overflow-hidden flex flex-col shadow-sm">
+        {isMobile ? (
+          /* Mobile Card List: ZERO TABLES, gesture responsive */
+          <div className="divide-y divide-[rgba(255,255,255,0.05)] bg-bg-surface p-1">
+            {filtered.map((s) => {
+              const activeSwipe = swipedCardId === s.id;
               let badgeStyle = 'bg-bg-elevated text-text-muted';
-              
-              if (s.status === 'in_transit') {
-                borderStyle = 'border-l-[4px] border-accent-primary';
-                badgeStyle = 'bg-accent-primary/10 text-accent-primary border border-accent-primary/15';
-              } else if (s.status === 'delivered') {
-                borderStyle = 'border-l-[4px] border-accent-success';
-                badgeStyle = 'bg-accent-success/10 text-accent-success border border-accent-success/15';
-              } else if (s.status === 'delayed') {
-                borderStyle = 'border-l-[4px] border-accent-warning';
-                badgeStyle = 'bg-accent-warning/10 text-accent-warning border border-accent-warning/15';
-              } else if (s.status === 'flagged') {
-                borderStyle = 'border-l-[4px] border-accent-warning';
-                badgeStyle = 'bg-accent-warning/20 text-accent-warning border border-accent-warning/35 font-bold';
-              } else if (s.status === 'failed') {
-                borderStyle = 'border-l-[4px] border-accent-danger';
-                badgeStyle = 'bg-accent-danger/10 text-accent-danger border border-accent-danger/25';
-              }
+              if (s.status === 'in_transit') badgeStyle = 'bg-accent-primary/15 text-accent-primary';
+              else if (s.status === 'delivered') badgeStyle = 'bg-accent-success/15 text-accent-success';
+              else if (s.status === 'delayed' || s.status === 'flagged') badgeStyle = 'bg-accent-warning/15 text-accent-warning';
+              else if (s.status === 'failed') badgeStyle = 'bg-accent-danger/15 text-accent-danger';
 
               return (
                 <div 
-                  key={s.id}
-                  onClick={() => setSelectedId(s.id)}
-                  className={cn(
-                    "bg-bg-surface border border-bg-elevated/80 rounded-lg p-4 transition-all hover:translate-y-[-2px] hover:shadow-md cursor-pointer flex flex-col gap-3 relative group",
-                    borderStyle
-                  )}
+                  key={s.id} 
+                  className="relative overflow-hidden w-full select-none"
+                  onTouchStart={(e) => {
+                    const startX = e.touches[0].clientX;
+                    e.currentTarget.setAttribute('data-swipe-start', String(startX));
+                  }}
+                  onTouchEnd={(e) => {
+                    const startX = Number(e.currentTarget.getAttribute('data-swipe-start') || 0);
+                    const endX = e.changedTouches[0].clientX;
+                    const deltaX = startX - endX;
+                    if (deltaX > 45) {
+                      setSwipedCardId(s.id); // swiped left -> reveal
+                    } else if (deltaX < -45) {
+                      setSwipedCardId(null); // swiped right -> collapse
+                    }
+                  }}
                 >
-                  <div className="flex items-center justify-between">
-                    <span className="font-mono text-[13px] font-bold text-text-primary group-hover:text-accent-primary transition-colors">
+                  {/* Swipe-to-Action slide-behind triggers */}
+                  <div className="absolute inset-y-0 right-0 w-[120px] flex items-center justify-end z-10">
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleFlag(s.id);
+                        setSwipedCardId(null);
+                      }}
+                      className="bg-accent-warning text-bg-base w-[60px] h-full flex flex-col items-center justify-center gap-1 active:opacity-85"
+                    >
+                      <AlertTriangle className="w-4 h-4 text-bg-base" />
+                      <span className="text-[9px] font-sans font-bold uppercase leading-none">Flag</span>
+                    </button>
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedId(s.id);
+                        setSwipedCardId(null);
+                      }}
+                      className="bg-accent-primary text-bg-base w-[60px] h-full flex flex-col items-center justify-center gap-1 active:opacity-85"
+                    >
+                      <Eye className="w-4 h-4 text-bg-base" />
+                      <span className="text-[9px] font-sans font-bold uppercase leading-none">Info</span>
+                    </button>
+                  </div>
+
+                  {/* Swipe-sliding main card layer */}
+                  <div 
+                    onClick={() => {
+                      if (activeSwipe) {
+                        setSwipedCardId(null);
+                      } else {
+                        setSelectedId(s.id);
+                      }
+                    }}
+                    className={cn(
+                      "bg-bg-surface p-4 flex flex-col gap-2.5 transition-transform duration-350 ease-out relative z-20 cursor-pointer border-b border-[rgba(255,255,255,0.03)]",
+                      activeSwipe ? "transform -translate-x-[110px]" : "transform translate-x-0"
+                    )}
+                  >
+                    {/* Top status & Action dropdown */}
+                    <div className="flex items-center justify-between">
+                      <span className={cn("px-2 py-0.5 rounded text-[9px] font-sans font-bold uppercase tracking-wider", badgeStyle)}>
+                        {s.status.replace('_', ' ')}
+                      </span>
+                      
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setContextMenuShipment(s);
+                        }}
+                        className="p-1 hover:bg-bg-elevated rounded text-text-muted active:text-text-primary"
+                        aria-label="Open context actions menu"
+                      >
+                        <MoreVertical className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    {/* Tracking ID */}
+                    <div className="font-mono text-xs font-bold text-accent-primary block">
                       {s.id}
-                    </span>
-                    <span className={cn(
-                      "px-2 py-0.5 rounded text-[9px] font-mono font-medium uppercase tracking-[0.05em]",
-                      badgeStyle
-                    )}>
-                      {s.status.replace('_', ' ')}
-                    </span>
-                  </div>
-
-                  {/* Route Indicator graphic */}
-                  <div className="bg-bg-elevated/40 border border-bg-elevated/20 p-2.5 rounded flex items-center justify-between text-xs gap-2">
-                    <div className="flex flex-col">
-                      <span className="text-[9px] font-mono text-text-muted uppercase font-bold">Departure Port</span>
-                      <span className="font-semibold text-text-primary">{s.origin.city}</span>
                     </div>
 
-                    {/* Arrow/Line strip */}
-                    <div className="flex-1 flex flex-col items-center">
-                      <Truck className="w-3.5 h-3.5 text-text-muted/60 absolute group-hover:translate-x-3 transition-transform duration-500 ease-out" />
-                      <div className="w-full h-px border-t border-dashed border-bg-elevated/80 mt-1" />
+                    {/* Path City details */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-[13px] font-semibold text-text-primary">{s.origin.city}</span>
+                      <span className="text-text-muted text-xs">&rarr;</span>
+                      <span className="text-[13px] font-semibold text-text-primary">{s.destination.city}</span>
                     </div>
 
-                    <div className="flex flex-col text-right">
-                      <span className="text-[9px] font-mono text-text-muted uppercase font-bold">Arrival Port</span>
-                      <span className="font-semibold text-text-primary">{s.destination.city}</span>
+                    {/* Low level facts */}
+                    <div className="flex items-center gap-2 text-[10px] text-text-muted font-mono flex-wrap">
+                      <span>👤 {s.carrier}</span>
+                      <span>•</span>
+                      <span>⚖️ {s.weight}kg</span>
+                      <span>•</span>
+                      <span className="text-text-secondary font-medium">📅 ETA {format(new Date(s.eta), 'MMM dd')}</span>
                     </div>
-                  </div>
 
-                  {/* Dimension stats */}
-                  <div className="grid grid-cols-3 gap-2 text-center text-[11px] border-t border-bg-elevated/40 pt-2 font-mono">
-                    <div className="flex flex-col items-center border-r border-bg-elevated/40">
-                      <Scale className="w-3.5 h-3.5 text-text-muted mb-0.5" />
-                      <span className="text-[10px] text-text-muted">Cargo Weight</span>
-                      <strong className="text-text-primary font-bold mt-0.5">{s.weight} kg</strong>
-                    </div>
-                    <div className="flex flex-col items-center border-r border-bg-elevated/40">
-                      <Package className="w-3.5 h-3.5 text-text-muted mb-0.5" />
-                      <span className="text-[10px] text-text-muted">Operator</span>
-                      <strong className="text-text-primary font-bold mt-0.5 truncate max-w-[70px]">{s.carrier}</strong>
-                    </div>
-                    <div className="flex flex-col items-center">
-                      <Calendar className="w-3.5 h-3.5 text-text-muted mb-0.5" />
-                      <span className="text-[10px] text-text-muted">ETA Limit</span>
-                      <strong className="text-text-primary font-bold mt-0.5">{format(new Date(s.eta), 'MMM dd')}</strong>
-                    </div>
-                  </div>
-
-                  <div className="text-[10px] font-mono text-text-muted bg-bg-elevated/20 p-2.5 rounded-sm border border-bg-elevated/10 flex items-center justify-between">
-                    <span>📐 {s.dimensions}</span>
-                    <span className="text-accent-primary font-bold opacity-0 group-hover:opacity-100 transition-opacity">
-                      Inspect Console &rarr;
-                    </span>
+                    {/* Swipe helper pill indicator */}
+                    <div className="absolute right-3 bottom-3 w-1.5 h-1.5 rounded-full bg-border-strong/40 animate-pulse hidden" />
                   </div>
                 </div>
               );
             })}
           </div>
+        ) : (
+          /* Desktop/Tablet List and Grid Views */
+          viewMode === 'list' ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead className="bg-bg-elevated/80 border-b border-bg-elevated">
+                  <tr>
+                    {[
+                      { key: 'id', label: 'Waybill ID', resp: '' },
+                      { key: 'origin', label: 'Departure Terminal', resp: '' },
+                      { key: 'destination', label: 'Arrival Terminal', resp: '' },
+                      { key: 'carrier', label: 'Operator', resp: 'hidden md:table-cell' },
+                      { key: 'status', label: 'Tracking Node Status', resp: '' },
+                      { key: 'eta', label: 'Projected ETA', resp: 'hidden sm:table-cell' },
+                      { key: 'weight', label: 'Mass Class', resp: 'hidden md:table-cell' },
+                    ].map(col => (
+                      <th 
+                        key={col.key} 
+                        className={cn(
+                          "px-5 py-3 text-[11px] font-mono text-text-muted uppercase font-bold tracking-wider cursor-pointer hover:text-text-primary bg-bg-elevated/70 group",
+                          col.resp
+                        )}
+                        onClick={() => toggleSort(col.key as keyof Shipment)}
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <span>{col.label}</span>
+                          <span className="text-text-muted/45 group-hover:text-text-primary transition-colors">
+                            {sortCol === col.key 
+                              ? (sortAsc ? <ChevronUp className="w-3.5 h-3.5 text-accent-primary" /> : <ChevronDown className="w-3.5 h-3.5 text-accent-primary" />) 
+                              : <ChevronDown className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100" />
+                            }
+                          </span>
+                        </div>
+                      </th>
+                    ))}
+                    <th className="px-5 py-3 text-[11px] font-mono text-text-muted uppercase font-bold tracking-wider text-right">Inspect</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-bg-elevated/50">
+                  {filtered.map((s, index) => {
+                    let badgeColor = 'bg-bg-elevated text-text-muted';
+                    if (s.status === 'in_transit') badgeColor = 'bg-accent-primary/10 text-accent-primary border border-accent-primary/15';
+                    else if (s.status === 'delivered') badgeColor = 'bg-accent-success/10 text-accent-success border border-accent-success/15';
+                    else if (s.status === 'delayed' || s.status === 'flagged') badgeColor = 'bg-accent-warning/10 text-accent-warning border border-accent-warning/15';
+                    else if (s.status === 'failed') badgeColor = 'bg-accent-danger/10 text-accent-danger border border-accent-danger/20';
+
+                    return (
+                      <tr 
+                        key={s.id} 
+                        onClick={() => setSelectedId(s.id)}
+                        className={cn(
+                          "hover:bg-bg-elevated/30 cursor-pointer transition-all border-b border-bg-elevated/60 group",
+                          index % 2 === 1 ? "bg-bg-surface/50" : "bg-bg-surface"
+                        )}
+                      >
+                        <td className="px-5 py-3 font-mono text-[12px] font-semibold text-text-primary group-hover:text-accent-primary transition-all">
+                          {s.id}
+                        </td>
+                        <td className="px-5 py-3 text-[12px]">
+                          <div className="flex flex-col">
+                            <span className="font-semibold text-text-primary">{s.origin.city}</span>
+                            <span className="font-mono text-[10px] text-text-muted">{s.origin.country}</span>
+                          </div>
+                        </td>
+                        <td className="px-5 py-3 text-[12px]">
+                          <div className="flex flex-col">
+                            <span className="font-semibold text-text-primary">{s.destination.city}</span>
+                            <span className="font-mono text-[10px] text-text-muted">{s.destination.country}</span>
+                          </div>
+                        </td>
+                        <td className="px-5 py-3 text-[12px] hidden md:table-cell">
+                          <span className="px-2 py-0.5 bg-bg-base border rounded text-text-muted text-[11px] font-mono">
+                            {s.carrier}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3">
+                          <span className={cn("px-2 py-0.5 rounded text-[10px] font-mono font-medium uppercase tracking-[0.05em]", badgeColor)}>
+                            {s.status.replace('_', ' ')}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3 font-mono text-[12px] text-text-primary hidden sm:table-cell">
+                          {format(new Date(s.eta), 'MMM dd, yyyy')}
+                        </td>
+                        <td className="px-5 py-3 text-[12px] hidden md:table-cell">
+                          <div className="flex flex-col">
+                            <span className="font-mono text-text-primary">{s.weight} kg</span>
+                            <span className="text-[10px] text-text-muted truncate max-w-[100px]">{s.dimensions}</span>
+                          </div>
+                        </td>
+                        <td className="px-5 py-3 text-right text-text-muted group-hover:text-accent-primary transition-colors">
+                          <span className="inline-flex items-center gap-1 bg-bg-elevated/40 border border-bg-elevated px-2 py-1 rounded text-[11px] font-semibold group-hover:bg-accent-primary group-hover:text-bg-base transition-all select-none">
+                            Inspect
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="p-5 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 bg-bg-elevated/10">
+              {filtered.map(s => {
+                let borderStyle = 'border-l-[4px] border-text-muted';
+                let badgeStyle = 'bg-bg-elevated text-text-muted';
+                
+                if (s.status === 'in_transit') borderStyle = 'border-l-[4px] border-accent-primary';
+                else if (s.status === 'delivered') borderStyle = 'border-l-[4px] border-accent-success';
+                else if (s.status === 'delayed' || s.status === 'flagged') borderStyle = 'border-l-[4px] border-accent-warning';
+                else if (s.status === 'failed') borderStyle = 'border-l-[4px] border-accent-danger';
+
+                return (
+                  <div 
+                    key={s.id}
+                    onClick={() => setSelectedId(s.id)}
+                    className={cn(
+                      "bg-bg-surface border border-bg-elevated/80 rounded-lg p-4 transition-all hover:-translate-y-[2px] cursor-pointer flex flex-col gap-3 relative group",
+                      borderStyle
+                    )}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono text-[13px] font-bold text-text-primary group-hover:text-accent-primary transition-colors">
+                        {s.id}
+                      </span>
+                    </div>
+
+                    <div className="bg-bg-elevated/40 border border-bg-elevated/25 p-2.5 rounded flex items-center justify-between text-xs gap-2">
+                      <div className="flex flex-col">
+                        <span className="text-[9px] font-mono text-text-muted uppercase font-bold">Departure Port</span>
+                        <span className="font-semibold text-text-primary">{s.origin.city}</span>
+                      </div>
+                      <div className="flex-1 flex flex-col items-center">
+                        <Truck className="w-3.5 h-3.5 text-text-muted/60 absolute group-hover:translate-x-3 transition-transform duration-500 ease-out" />
+                        <div className="w-full h-px border-t border-dashed border-bg-elevated/80 mt-1" />
+                      </div>
+                      <div className="flex flex-col text-right">
+                        <span className="text-[9px] font-mono text-text-muted uppercase font-bold">Arrival Port</span>
+                        <span className="font-semibold text-text-primary">{s.destination.city}</span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2 text-center text-[11px] border-t border-bg-elevated/40 pt-2 font-mono">
+                      <div className="flex flex-col items-center border-r border-bg-elevated/40">
+                        <Scale className="w-3.5 h-3.5 text-text-muted mb-0.5" />
+                        <strong className="text-text-primary font-bold mt-0.5">{s.weight} kg</strong>
+                      </div>
+                      <div className="flex flex-col items-center border-r border-bg-elevated/40">
+                        <Package className="w-3.5 h-3.5 text-text-muted mb-0.5" />
+                        <strong className="text-text-primary font-bold mt-0.5 truncate max-w-[70px]">{s.carrier}</strong>
+                      </div>
+                      <div className="flex flex-col items-center">
+                        <Calendar className="w-3.5 h-3.5 text-text-muted mb-0.5" />
+                        <strong className="text-text-primary font-bold mt-0.5">{format(new Date(s.eta), 'MMM dd')}</strong>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )
         )}
 
-        {/* Empty placeholder design */}
+        {/* Empty layout state check */}
         {filtered.length === 0 && (
           <div className="text-center py-16 text-text-muted bg-bg-surface">
-            <div className="flex flex-col items-center max-w-sm mx-auto">
-              <div className="p-3 bg-bg-elevated rounded-full text-text-muted mb-3 border border-bg-elevated">
+            <div className="flex flex-col items-center max-w-sm mx-auto p-4">
+              <div className="p-3 bg-bg-elevated rounded-full text-text-muted mb-3">
                 <Filter className="w-6 h-6 opacity-60" />
               </div>
               <h3 className="text-sm font-semibold text-text-primary">No Matching Freight Found</h3>
-              <p className="text-xs text-text-muted mt-1 leading-relaxed">
-                Could not find any consignments matching "<strong>{search || statusFilter || carrierFilter || originFilter}</strong>" with current constraints. Try pulling back or resetting filter controls.
+              <p className="text-xs text-text-muted mt-1 leading-relaxed text-center">
+                Could not find any consignments matching filters. Try pulling back or resetting controls.
               </p>
               <button 
                 onClick={handleResetFilters}
-                className="mt-4 inline-flex items-center gap-1 text-xs border border-bg-elevated bg-bg-elevated/40 hover:bg-bg-elevated text-text-primary px-3 py-1.5 rounded transition-all active:scale-95 font-semibold"
+                className="mt-4 border border-bg-elevated bg-bg-elevated hover:bg-bg-elevated/65 text-text-primary px-4 py-2 rounded-lg text-xs font-semibold"
               >
-                <RotateCcw className="w-3 h-3" />
-                <span>Reset manifest query filters</span>
+                Reset manifest query filters
               </button>
             </div>
           </div>
         )}
       </div>
 
-      {/* Slide-out Shipment Details controller */}
+      {/* MOBILE COMPONENT 1: Filter Bottom Sheet (70vh sliding overlay drawer) */}
+      {showFilterBottomSheet && (
+        <>
+          <div 
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 animate-in fade-in"
+            onClick={() => setShowFilterBottomSheet(false)}
+          />
+          <div className="fixed bottom-0 inset-x-0 max-h-[75vh] h-[75vh] bg-bg-surface border-t border-x border-bg-elevated rounded-t-xl z-50 flex flex-col shadow-2xl animate-in slide-in-from-bottom duration-300">
+            {/* Handlebar */}
+            <div className="w-full py-2.5 flex items-center justify-center shrink-0">
+              <div className="w-10 h-[4px] rounded-full bg-[#cbd5e1]/20" />
+            </div>
+
+            <div className="px-4 py-3 border-b border-bg-elevated flex items-center justify-between shrink-0">
+              <span className="font-bold text-sm text-text-primary">Operational Parameters</span>
+              <button onClick={() => setShowFilterBottomSheet(false)} className="p-1 text-text-muted hover:text-text-primary">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Scrollable filtering content body */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-5">
+              
+              {/* Waybill tracking status pills */}
+              <div className="space-y-2">
+                <span className="text-[10px] font-mono text-text-muted uppercase block font-bold leading-none">Tracking Status</span>
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-2 scrollbar-none -mx-1 px-1">
+                  {['all', 'in_transit', 'delivered', 'delayed', 'failed', 'flagged'].map((st) => (
+                    <button
+                      key={st}
+                      onClick={() => setStatusFilter(st as any)}
+                      className={cn(
+                        "px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap border shrink-0 transition-colors uppercase font-mono",
+                        statusFilter === st 
+                          ? "bg-accent-primary text-bg-base border-accent-primary font-bold" 
+                          : "bg-bg-elevated border-transparent text-text-secondary"
+                      )}
+                    >
+                      {st.replace('_', ' ')}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Courier service checkboxes */}
+              <div className="space-y-2">
+                <span className="text-[10px] font-mono text-text-muted uppercase block font-bold leading-none">Registered Carrier</span>
+                <div className="grid grid-cols-2 gap-2.5">
+                  {['all', ...CARRIERS_LIST].map((carrier) => (
+                    <button
+                      key={carrier}
+                      onClick={() => setCarrierFilter(carrier)}
+                      className={cn(
+                        "px-3 py-2 rounded-lg text-left text-xs border truncate relative text-ellipsis font-bold",
+                        carrierFilter === carrier 
+                          ? "border-accent-primary bg-accent-primary/10 text-accent-primary" 
+                          : "border-bg-elevated bg-bg-surface text-text-secondary"
+                      )}
+                    >
+                      <span>{carrier === 'all' ? "All Carriers" : carrier}</span>
+                      {carrierFilter === carrier && (
+                        <span className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-accent-primary flex items-center justify-center text-bg-base font-bold text-[8px]">&radic;</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Origin cities picker list */}
+              <div className="space-y-2">
+                <span className="text-[10px] font-mono text-text-muted uppercase block font-bold leading-none">Departure Port Hub</span>
+                <div className="grid grid-cols-2 gap-2.5">
+                  {['all', ...Object.keys(CITY_COORDS)].map((city) => (
+                    <button
+                      key={city}
+                      onClick={() => setOriginFilter(city)}
+                      className={cn(
+                        "px-3 py-2 rounded-lg text-left text-xs border truncate relative text-ellipsis font-bold",
+                        originFilter === city 
+                          ? "border-accent-primary bg-accent-primary/10 text-accent-primary" 
+                          : "border-bg-elevated bg-bg-surface text-text-secondary"
+                      )}
+                    >
+                      <span>{city === 'all' ? "All Ports" : city}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Weight limit slider */}
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-[10px] font-mono text-text-muted uppercase font-bold leading-none">Max Consignment Weight</span>
+                  <span className="text-[10px] font-mono text-accent-primary bg-accent-primary/10 px-1.5 py-0.5 rounded font-extrabold">{maxWeight}kg</span>
+                </div>
+                <input 
+                  type="range"
+                  min="15"
+                  max="600"
+                  step="10"
+                  value={maxWeight}
+                  onChange={e => setMaxWeight(Number(e.target.value))}
+                  className="w-full h-1 bg-bg-elevated accent-accent-primary mt-2"
+                />
+              </div>
+
+            </div>
+
+            {/* Footer full screen triggers */}
+            <div className="border-t border-bg-elevated p-4 bg-bg-surface shrink-0 flex items-center gap-3">
+              <button 
+                onClick={() => {
+                  handleResetFilters();
+                  setShowFilterBottomSheet(false);
+                }}
+                className="flex-1 bg-bg-surface hover:bg-bg-elevated text-text-primary text-xs py-2.5 border border-bg-elevated rounded-lg font-bold"
+              >
+                Clear All
+              </button>
+              <button 
+                onClick={() => setShowFilterBottomSheet(false)}
+                className="flex-1 bg-accent-primary text-bg-base text-xs py-2.5 rounded-lg font-bold shadow-lg shadow-accent-primary/15"
+              >
+                Apply Parameters
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* MOBILE COMPONENT 2: Sort Selection Action Sheet */}
+      {showSortActionSheet && (
+        <>
+          <div 
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 animate-in fade-in"
+            onClick={() => setShowSortActionSheet(false)}
+          />
+          <div className="fixed bottom-0 inset-x-0 bg-bg-surface border-t border-x border-bg-elevated rounded-t-xl z-50 flex flex-col p-4 shadow-2xl animate-in slide-in-from-bottom duration-200">
+            <div className="w-10 h-[4px] rounded-full bg-[#cbd5e1]/20 mx-auto mb-4 shrink-0" />
+            <h4 className="text-[10px] font-mono text-text-muted uppercase block font-bold leading-none mb-3">Sort Registries</h4>
+            
+            <div className="space-y-1">
+              {[
+                { label: 'Newest freight dispatched first', col: 'createdAt' as const, asc: false },
+                { label: 'ETA Soonest transit first', col: 'eta' as const, asc: true },
+                { label: 'Weight Payload (High to Low)', col: 'weight' as const, asc: false },
+                { label: 'Waybill ID sequence (Alphanumeric)', col: 'id' as const, asc: true },
+              ].map((opt, i) => {
+                const isActive = sortCol === opt.col && sortAsc === opt.asc;
+                return (
+                  <button
+                    key={i}
+                    onClick={() => applyMobileSort(opt.col, opt.asc)}
+                    className={cn(
+                      "w-full flex items-center justify-between px-3 py-3 rounded-lg text-left text-xs transition-colors font-medium active:bg-bg-elevated",
+                      isActive ? "bg-accent-primary/10 text-accent-primary font-bold" : "hover:bg-bg-elevated/40 text-text-primary"
+                    )}
+                  >
+                    <span>{opt.label}</span>
+                    {isActive && <Check className="w-4 h-4 text-accent-primary" />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* MOBILE COMPONENT 3: Tapped Card 3-Dot context sheet action modal */}
+      {contextMenuShipment && (
+        <>
+          <div 
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 animate-in"
+            onClick={() => setContextMenuShipment(null)}
+          />
+          <div className="fixed bottom-0 inset-x-0 bg-bg-surface border-t border-bg-elevated rounded-t-xl p-4 z-50 flex flex-col gap-3.5 shadow-2xl animate-in slide-in-from-bottom duration-150">
+            {/* Top drawer drag line */}
+            <div className="w-10 h-1 rounded-full bg-[#cbd5e1]/20 mx-auto shrink-0" />
+            
+            <div className="flex items-center gap-2 pb-2.5 border-b border-bg-elevated">
+              <span className="font-mono text-xs font-bold text-accent-primary">{contextMenuShipment.id}</span>
+              <span className="text-[10px] text-text-muted">Waybill Context Actions</span>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <button
+                onClick={() => {
+                  setSelectedId(contextMenuShipment.id);
+                  setContextMenuShipment(null);
+                }}
+                className="w-full flex items-center gap-3.5 px-3 py-3 hover:bg-bg-elevated rounded-lg text-left text-xs font-semibold text-text-primary active:bg-bg-elevated"
+              >
+                <Eye className="w-4 h-4 text-accent-primary" />
+                <span>View Full Stepper Waypoint details</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  handleFlag(contextMenuShipment.id);
+                  setContextMenuShipment(null);
+                }}
+                className="w-full flex items-center gap-3.5 px-3 py-3 hover:bg-bg-elevated rounded-lg text-left text-xs font-semibold text-accent-warning active:bg-bg-elevated"
+              >
+                <AlertTriangle className="w-4 h-4 text-accent-warning" />
+                <span>Flag Critical Incidental Exception</span>
+              </button>
+
+              <button
+                onClick={() => handleCopyIDToClipboard(contextMenuShipment.id)}
+                className="w-full flex items-center gap-3.5 px-3 py-3 hover:bg-bg-elevated rounded-lg text-left text-xs font-semibold text-text-primary active:bg-bg-elevated"
+              >
+                <Copy className="w-4 h-4 text-text-muted" />
+                <span>Copy Consignment Tracking ID</span>
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Slide-out details drawer frame */}
       <ShipmentDrawer shipment={selectedShipment} onClose={() => setSelectedId(null)} onFlag={handleFlag} />
 
-      {/* Creation and Register Freight Modal */}
+      {/* Creation Consignment Modal */}
       {isCreateOpen && (
         <div className="fixed inset-0 bg-bg-base/85 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
           <div className="bg-bg-surface border border-bg-elevated rounded-xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
             
-            {/* Modal Header */}
             <div className="px-5 py-4 bg-bg-elevated/80 border-b border-bg-elevated/80 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="p-1.5 bg-accent-primary/10 text-accent-primary rounded">
@@ -804,10 +1103,7 @@ export function Shipments({ initialSelectedId, onClearSelection }: { initialSele
               </button>
             </div>
 
-            {/* Modal content body */}
             <form onSubmit={handleRegisterShipment} className="p-5 flex flex-col gap-4 text-xs font-sans">
-              
-              {/* Waybill tracking field */}
               <div className="flex flex-col gap-1.5">
                 <label className="text-[10px] font-mono text-text-muted uppercase font-bold">Consignment tracking number (Waybill ID)</label>
                 <input 
@@ -820,14 +1116,13 @@ export function Shipments({ initialSelectedId, onClearSelection }: { initialSele
                 />
               </div>
 
-              {/* Hub terminal coordinates selection row */}
               <div className="grid grid-cols-2 gap-3.5">
                 <div className="flex flex-col gap-1.5">
                   <label className="text-[10px] font-mono text-text-muted uppercase font-bold">Departure Depot</label>
                   <select 
                     value={newShipment.originCity}
                     onChange={e => setNewShipment(p => ({ ...p, originCity: e.target.value }))}
-                    className="bg-bg-surface border border-bg-elevated rounded p-2 focus:outline-none focus:border-accent-primary cursor-pointer font-medium"
+                    className="bg-bg-surface border border-bg-elevated rounded p-2 focus:outline-none focus:border-accent-primary cursor-pointer font-medium text-text-primary"
                   >
                     {Object.keys(CITY_COORDS).map(city => (
                       <option key={city} value={city}>{city} ({CITY_COORDS[city].country})</option>
@@ -840,7 +1135,7 @@ export function Shipments({ initialSelectedId, onClearSelection }: { initialSele
                   <select 
                     value={newShipment.destinationCity}
                     onChange={e => setNewShipment(p => ({ ...p, destinationCity: e.target.value }))}
-                    className="bg-bg-surface border border-bg-elevated rounded p-2 focus:outline-none focus:border-accent-primary cursor-pointer font-medium"
+                    className="bg-bg-surface border border-bg-elevated rounded p-2 focus:outline-none focus:border-accent-primary cursor-pointer font-medium text-text-primary"
                   >
                     {Object.keys(CITY_COORDS).map(city => (
                       <option key={city} value={city}>{city} ({CITY_COORDS[city].country})</option>
@@ -849,14 +1144,13 @@ export function Shipments({ initialSelectedId, onClearSelection }: { initialSele
                 </div>
               </div>
 
-              {/* Courier Operator and Status */}
               <div className="grid grid-cols-2 gap-3.5">
                 <div className="flex flex-col gap-1.5">
                   <label className="text-[10px] font-mono text-text-muted uppercase font-bold">Transporter Partner</label>
                   <select 
                     value={newShipment.carrier}
                     onChange={e => setNewShipment(p => ({ ...p, carrier: e.target.value }))}
-                    className="bg-bg-surface border border-bg-elevated rounded p-2 focus:outline-none focus:border-accent-primary cursor-pointer"
+                    className="bg-bg-surface border border-bg-elevated rounded p-2 focus:outline-none focus:border-accent-primary cursor-pointer text-text-primary"
                   >
                     {CARRIERS_LIST.map(c => (
                       <option key={c} value={c}>{c}</option>
@@ -869,7 +1163,7 @@ export function Shipments({ initialSelectedId, onClearSelection }: { initialSele
                   <select 
                     value={newShipment.status}
                     onChange={e => setNewShipment(p => ({ ...p, status: e.target.value as ShipmentStatus }))}
-                    className="bg-bg-surface border border-bg-elevated rounded p-2 focus:outline-none focus:border-accent-primary cursor-pointer text-accent-primary font-bold"
+                    className="bg-bg-surface border border-bg-elevated rounded p-2 focus:outline-none focus:border-accent-primary cursor-pointer text-accent-primary font-bold text-text-primary"
                   >
                     <option value="in_transit">In Transit (Active)</option>
                     <option value="delayed">Delayed (Exception)</option>
@@ -880,7 +1174,6 @@ export function Shipments({ initialSelectedId, onClearSelection }: { initialSele
                 </div>
               </div>
 
-              {/* Mass + Dimensions */}
               <div className="grid grid-cols-3 gap-3">
                 <div className="col-span-2 flex flex-col gap-1.5">
                   <label className="text-[10px] font-mono text-text-muted uppercase font-bold">Container Dimensions</label>
@@ -890,7 +1183,7 @@ export function Shipments({ initialSelectedId, onClearSelection }: { initialSele
                     onChange={e => setNewShipment(prev => ({ ...prev, dimensions: e.target.value }))}
                     required
                     placeholder="30x30x30 cm"
-                    className="bg-bg-surface border border-bg-elevated rounded p-2 tracking-wide focus:outline-none focus:border-accent-primary"
+                    className="bg-bg-surface border border-bg-elevated rounded p-2 tracking-wide focus:outline-none focus:border-accent-primary text-text-primary"
                   />
                 </div>
 
@@ -903,12 +1196,11 @@ export function Shipments({ initialSelectedId, onClearSelection }: { initialSele
                     max="1500"
                     onChange={e => setNewShipment(prev => ({ ...prev, weight: Number(e.target.value) }))}
                     required
-                    className="bg-bg-surface border border-bg-elevated rounded p-2 focus:outline-none focus:border-accent-primary font-mono font-bold"
+                    className="bg-bg-surface border border-bg-elevated rounded p-2 focus:outline-none focus:border-accent-primary font-mono font-bold text-text-primary"
                   />
                 </div>
               </div>
 
-              {/* ETA window */}
               <div className="flex flex-col gap-1.5">
                 <label className="text-[10px] font-mono text-text-muted uppercase font-bold flex justify-between">
                   <span>Projected Departure-to-Arrival Duration</span>
@@ -928,12 +1220,11 @@ export function Shipments({ initialSelectedId, onClearSelection }: { initialSele
                 </div>
               </div>
 
-              {/* Actions Footer row */}
               <div className="flex justify-end items-center gap-2.5 pt-4 border-t border-bg-elevated/60 mt-2">
                 <button 
                   type="button"
                   onClick={() => setIsCreateOpen(false)}
-                  className="bg-bg-surface border border-bg-elevated hover:bg-bg-elevated/40 text-text-primary px-4 py-2 rounded-md font-semibold font-mono active:scale-95 transition-all text-[12px] h-9"
+                  className="bg-bg-surface border border-bg-elevated hover:bg-bg-elevated/45 text-text-primary px-4 py-2 rounded-md font-semibold font-mono active:scale-95 transition-all text-[12px] h-9"
                 >
                   Cancel
                 </button>
@@ -944,7 +1235,6 @@ export function Shipments({ initialSelectedId, onClearSelection }: { initialSele
                   Confirm Registration
                 </button>
               </div>
-
             </form>
           </div>
         </div>
