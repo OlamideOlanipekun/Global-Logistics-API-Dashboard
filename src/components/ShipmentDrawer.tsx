@@ -21,8 +21,8 @@ export function ShipmentDrawer({ shipment, onClose, onFlag }: DrawerProps) {
       />
       
       {/* Drawer panel */}
-      <div className="fixed top-0 right-0 h-full w-full sm:w-[450px] bg-bg-surface border-l border-bg-elevated shadow-2xl z-50 overflow-y-auto animate-in slide-in-from-right duration-300">
-        <div className="sticky top-0 bg-bg-surface/90 backdrop-blur border-b border-bg-elevated px-4 sm:px-6 py-4 flex items-center justify-between z-10">
+      <div className="fixed inset-y-0 right-0 h-full w-full sm:w-[450px] bg-bg-surface border-l border-bg-elevated shadow-2xl z-50 flex flex-col animate-in slide-in-from-right duration-300">
+        <div className="bg-bg-surface border-b border-bg-elevated px-4 sm:px-6 py-4 flex items-center justify-between shrink-0">
           <div>
             <h2 className="font-display text-xl font-bold">{shipment.id}</h2>
             <p className="text-sm text-text-muted">Managed by {shipment.carrier}</p>
@@ -35,7 +35,7 @@ export function ShipmentDrawer({ shipment, onClose, onFlag }: DrawerProps) {
           </button>
         </div>
 
-        <div className="p-4 sm:p-6 space-y-6 sm:space-y-8">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 sm:space-y-8">
           {/* Status highlight */}
           <div className="flex gap-3 sm:gap-4">
             <div className="flex-1 bg-bg-base p-3 sm:p-4 rounded-lg border border-bg-elevated border-b-2 border-b-accent-primary">
@@ -126,7 +126,7 @@ export function ShipmentDrawer({ shipment, onClose, onFlag }: DrawerProps) {
         </div>
 
         {/* Footer Actions */}
-        <div className="sticky bottom-0 bg-bg-surface/90 backdrop-blur border-t border-bg-elevated p-4">
+        <div className="border-t border-bg-elevated p-4 bg-bg-surface shrink-0">
           <button 
             className="w-full bg-bg-base hover:bg-accent-warning/10 border border-accent-warning flex items-center justify-center gap-2 py-2.5 rounded-md text-accent-warning font-medium transition-colors"
             onClick={() => {
