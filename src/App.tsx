@@ -116,7 +116,7 @@ export default function App() {
         </div>
         
         {/* Scrollable Page Content Container */}
-        <main className="flex-1 overflow-y-auto w-full relative z-0 min-w-0 bg-bg-base">
+        <main className="flex-1 overflow-y-auto w-full relative min-w-0 bg-bg-base">
           {activeTab === 'dashboard' && <Dashboard />}
           {activeTab === 'shipments' && <Shipments initialSelectedId={globalSearchId} onClearSelection={() => setGlobalSearchId(null)} />}
           {activeTab === 'carriers' && <Carriers />}
