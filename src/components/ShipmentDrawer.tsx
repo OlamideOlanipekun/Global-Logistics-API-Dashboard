@@ -21,8 +21,8 @@ export function ShipmentDrawer({ shipment, onClose, onFlag }: DrawerProps) {
       />
       
       {/* Drawer panel */}
-      <div className="fixed top-0 right-0 h-full w-[450px] bg-bg-surface border-l border-bg-elevated shadow-2xl z-50 overflow-y-auto animate-in slide-in-from-right duration-300">
-        <div className="sticky top-0 bg-bg-surface/90 backdrop-blur border-b border-bg-elevated px-6 py-4 flex items-center justify-between z-10">
+      <div className="fixed top-0 right-0 h-full w-full sm:w-[450px] bg-bg-surface border-l border-bg-elevated shadow-2xl z-50 overflow-y-auto animate-in slide-in-from-right duration-300">
+        <div className="sticky top-0 bg-bg-surface/90 backdrop-blur border-b border-bg-elevated px-4 sm:px-6 py-4 flex items-center justify-between z-10">
           <div>
             <h2 className="font-display text-xl font-bold">{shipment.id}</h2>
             <p className="text-sm text-text-muted">Managed by {shipment.carrier}</p>
@@ -35,16 +35,16 @@ export function ShipmentDrawer({ shipment, onClose, onFlag }: DrawerProps) {
           </button>
         </div>
 
-        <div className="p-6 space-y-8">
+        <div className="p-4 sm:p-6 space-y-6 sm:space-y-8">
           {/* Status highlight */}
-          <div className="flex gap-4">
-            <div className="flex-1 bg-bg-base p-4 rounded-lg border border-bg-elevated border-b-2 border-b-accent-primary">
+          <div className="flex gap-3 sm:gap-4">
+            <div className="flex-1 bg-bg-base p-3 sm:p-4 rounded-lg border border-bg-elevated border-b-2 border-b-accent-primary">
               <span className="text-xs text-text-muted mb-1 block">Current Status</span>
               <span className="font-medium capitalize text-accent-primary flex items-center gap-2">
                 {shipment.status.replace('_', ' ')}
               </span>
             </div>
-            <div className="flex-1 bg-bg-base p-4 rounded-lg border border-bg-elevated">
+            <div className="flex-1 bg-bg-base p-3 sm:p-4 rounded-lg border border-bg-elevated">
               <span className="text-xs text-text-muted mb-1 block">Expected Delivery</span>
               <span className="font-mono text-sm">{format(new Date(shipment.eta), 'MMM dd, yyyy')}</span>
             </div>
@@ -53,19 +53,19 @@ export function ShipmentDrawer({ shipment, onClose, onFlag }: DrawerProps) {
           {/* Route Info */}
           <div>
             <h3 className="text-sm font-medium text-text-muted mb-4 uppercase tracking-wider">Route Configuration</h3>
-            <div className="flex items-center justify-between bg-bg-base p-4 rounded-lg border border-bg-elevated">
-              <div className="text-center flex-1">
-                <p className="font-mono text-lg font-bold">{shipment.origin.city}</p>
-                <p className="text-xs text-text-muted">{shipment.origin.country}</p>
+            <div className="flex items-center justify-between bg-bg-base p-3 sm:p-4 rounded-lg border border-bg-elevated gap-2">
+              <div className="text-center flex-1 min-w-0">
+                <p className="font-mono text-sm sm:text-lg font-bold truncate" title={shipment.origin.city}>{shipment.origin.city}</p>
+                <p className="text-xs text-text-muted truncate" title={shipment.origin.country}>{shipment.origin.country}</p>
               </div>
-              <div className="flex-1 flex flex-col items-center justify-center px-4">
+              <div className="flex-1 flex flex-col items-center justify-center px-1 sm:px-4">
                 <div className="w-full h-px bg-bg-elevated relative">
                   <Truck className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 text-text-muted bg-bg-base p-0.5" />
                 </div>
               </div>
-              <div className="text-center flex-1">
-                <p className="font-mono text-lg font-bold">{shipment.destination.city}</p>
-                <p className="text-xs text-text-muted">{shipment.destination.country}</p>
+              <div className="text-center flex-1 min-w-0">
+                <p className="font-mono text-sm sm:text-lg font-bold truncate" title={shipment.destination.city}>{shipment.destination.city}</p>
+                <p className="text-xs text-text-muted truncate" title={shipment.destination.country}>{shipment.destination.country}</p>
               </div>
             </div>
           </div>
