@@ -289,16 +289,16 @@ export function Dashboard() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-5 min-h-[340px] lg:h-[340px]">
-        <div className="bg-bg-surface border border-bg-elevated rounded-lg p-4 relative flex flex-col h-[340px] lg:h-full">
+        <div className="bg-bg-surface border border-bg-elevated rounded-lg p-4 relative flex flex-col h-[340px] lg:h-full overflow-hidden">
           <div className="text-[11px] font-mono text-text-muted mb-3 uppercase flex justify-between">
             <span>Route Visibility: Africa Hubs</span>
             <span className="text-accent-primary font-bold">LIVE LAYER</span>
           </div>
-          <div className="flex-1 rounded min-h-0 relative">
+          <div className="flex-1 rounded min-h-0 relative overflow-hidden">
             <AfricaMap shipments={shipments} />
           </div>
         </div>
-        <div className="bg-bg-surface border border-bg-elevated rounded-lg p-4 flex flex-col min-h-[250px] h-[340px] lg:h-full">
+        <div className="bg-bg-surface border border-bg-elevated rounded-lg p-4 flex flex-col min-h-[250px] h-[340px] lg:h-full overflow-hidden">
           <div className="text-[11px] font-mono text-text-muted mb-3 uppercase flex justify-between items-center bg-transparent">
             <span>Live Event Feed</span>
             <span className="text-accent-success font-bold flex items-center gap-1 text-[10px] animate-pulse">
@@ -306,7 +306,7 @@ export function Dashboard() {
               STREAMING
             </span>
           </div>
-          <div className="flex-1 min-h-0 flex flex-col">
+          <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
             <LiveFeed shipments={shipments} onSelectShipment={handleSelectShipment} />
           </div>
         </div>
