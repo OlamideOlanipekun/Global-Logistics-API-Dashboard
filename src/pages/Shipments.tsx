@@ -26,6 +26,7 @@ import {
 import { cn } from '../lib/utils';
 import { format, addDays } from 'date-fns';
 import { ShipmentDrawer } from '../components/ShipmentDrawer';
+import { RouteWaypointVisualizer } from '../components/RouteWaypointVisualizer';
 
 const CITY_COORDS: { [key: string]: { country: string, lat: number, lng: number } } = {
   Lagos: { country: 'Nigeria', lat: 6.5244, lng: 3.3792 },
@@ -394,6 +395,18 @@ export function Shipments({ initialSelectedId, onClearSelection }: { initialSele
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Route Waypoint Vector/SVG Map telemetry visualization */}
+      <div className="mb-6">
+        <RouteWaypointVisualizer 
+          shipment={selectedShipment || (filtered.length > 0 ? filtered[0] : null)} 
+        />
+        {!selectedId && filtered.length > 0 && (
+          <div className="text-[10px] text-text-muted font-mono mt-2 text-center">
+            💡 Previewing first filtered waybill route live. Select any consignment row or card below to track its path.
+          </div>
+        )}
       </div>
 
       {/* Primary Query Filters Control Strip */}
